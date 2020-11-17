@@ -363,7 +363,43 @@ HAVING SUM(i1.quantity * i1.unit_price) > (SELECT SUM(i2.quantity * i2.unit_pric
 
 
 
+/*
+Listar el Número, nombre, apellido, estado, cantidad de Órdenes, monto total comprado por Cliente
+durante el año 2015 que no sean del estado de Florida.
+Mostrar sólo aquellos clientes cuyo monto total comprado sea mayor que el promedio del monto total
+comprado por Cliente que no sean del estado Florida. Ordenado por total comprado en forma
+descendente.
+*/
 
+
+SELECT c.customer_num, fname, lname, state, COUNT(DISTINCT o.order_num), SUM(i.quantity * i.unit_price) 
+FROM customer c LEFT JOIN orders o ON o.customer_num = c.customer_num LEFT JOIN items i ON i.order_num = o.order_num
+WHERE YEAR(o.order_date) = 2015 AND state != 'FL'
+GROUP BY c.customer_num, fname, lname, state
+HAVING SUM(i.quantity * i.unit_price) > (SELECT SUM(i1.quantity * i1.unit_price) / COUNT(DISTINCT o1.customer_num) FROM orders o1 JOIN items i1 ON o1.order_num = i1.order_num 
+											JOIN customer c1 ON c1.customer_num = o1.customer_num
+											WHERE c1.state != 'FL')
+ORDER BY SUM(i.quantity * i.unit_price) DESC
+
+
+/*
+Seleccionar todos los clientes cuyo monto total comprado sea mayor al de su refererente durante el
+año 2015. Mostrar número, nombre, apellido y los montos totales comprados de ambos durante ese
+año. Tener en cuenta que un cliente puede no tener referente y que el referente pudo no haber
+comprado nada durante el año 2015, mostrarlo igual.
+*/
+
+SELECT c1.customer_num, c1.fname, c1.lname, SUM(i1.quantity*i1.unit_price), a.customer_num, a.fname, a.lname, a.total
+FROM customer c1 LEFT JOIN orders o1 ON o1.customer_num = c1.customer_num LEFT JOIN items i1 ON i1.order_num = o1.order_num
+LEFT JOIN (
+	SELECT c2.customer_num, c2.fname, c2.lname, SUM(i2.quantity*i2.unit_price) AS 'total'
+	FROM customer c2 LEFT JOIN orders o2 ON o2.customer_num = c2.customer_num LEFT JOIN items i2 ON i2.order_num = o2.order_num
+	WHERE YEAR(o2.order_date) = 2015
+	GROUP BY c2.customer_num, c2.fname, c2.lname
+) a ON a.customer_num = c1.customer_num_referedBy
+WHERE YEAR(o1.order_date) = 2015
+GROUP BY c1.customer_num, c1.fname, c1.lname, a.total, a.customer_num, a.fname, a.lname
+HAVING SUM(i1.quantity*i1.unit_price) > COALESCE(a.total, 0)
 
 
 
