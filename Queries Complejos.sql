@@ -23,16 +23,18 @@ cant_producto y si el campo ult_fecha_orden posee un NULL informar ‘No Posee
 
 DROP VIEW vista_fabricantes
 GO
-CREATE VIEW vista_fabricantes AS
+CREATE VIEW vista_fabricantes
+AS
 	SELECT m.manu_code, m.manu_name, COUNT(DISTINCT p.stock_num) AS cant_productos, MAX(o1.order_date) AS ultima_orden
 	FROM manufact m LEFT JOIN products p ON p.manu_code = m.manu_code
-					LEFT JOIN items i1 ON i1.manu_code = m.manu_code AND i1.stock_num = p.stock_num
-					LEFT JOIN orders o1 ON o1.order_num = i1.order_num
+		LEFT JOIN items i1 ON i1.manu_code = m.manu_code AND i1.stock_num = p.stock_num
+		LEFT JOIN orders o1 ON o1.order_num = i1.order_num
 	GROUP BY m.manu_code, m.manu_name
 	HAVING COUNT(DISTINCT p.stock_num) > 2 OR COUNT(DISTINCT p.stock_num) = 0
 GO
 
-SELECT manu_code, manu_name, cant_productos, COALESCE(CAST(ultima_orden AS VARCHAR) , 'No posee órdenes') FROM vista_fabricantes
+SELECT manu_code, manu_name, cant_productos, COALESCE(CAST(ultima_orden AS VARCHAR) , 'No posee órdenes')
+FROM vista_fabricantes
 
 
 /*
@@ -51,13 +53,14 @@ Mostrar los registros ordenados por monto total vendido de mayor a menor.
 */
 
 SELECT m.manu_code, m.manu_name, COUNT(DISTINCT i1.order_num) AS cantidad_ventas, SUM(i1.quantity * i1.unit_price) as monto_total
-	FROM manufact m LEFT JOIN items i1 ON i1.manu_code = m.manu_code
-						 JOIN product_types pt ON pt.stock_num = i1.stock_num
-	WHERE m.manu_code LIKE '[AN]__' AND (pt.description LIKE '%tennis%' OR pt.description LIKE '%ball%')
-	GROUP BY m.manu_code, m.manu_name
-	HAVING SUM(i1.quantity * i1.unit_price) > 
-		(SELECT SUM(i2.quantity * i2.unit_price)/COUNT(DISTINCT i2.manu_code) FROM items i2) 
-	ORDER BY SUM(i1.quantity * i1.unit_price) DESC
+FROM manufact m LEFT JOIN items i1 ON i1.manu_code = m.manu_code
+	JOIN product_types pt ON pt.stock_num = i1.stock_num
+WHERE m.manu_code LIKE '[AN]__' AND (pt.description LIKE '%tennis%' OR pt.description LIKE '%ball%')
+GROUP BY m.manu_code, m.manu_name
+HAVING SUM(i1.quantity * i1.unit_price) > 
+		(SELECT SUM(i2.quantity * i2.unit_price)/COUNT(DISTINCT i2.manu_code)
+FROM items i2)
+ORDER BY SUM(i1.quantity * i1.unit_price) DESC
 
 
 /*
@@ -78,24 +81,35 @@ No se permite utilizar funciones, ni tablas temporales.
 */
 
 DROP VIEW vista_clientes
-CREATE VIEW vista_clientes AS
-	SELECT 1 AS ord, c1.customer_num, c1.lname, c1.company, COUNT(DISTINCT o1.order_num) AS cant_ordenes, SUM(i1.unit_price * i1.quantity) as monto_total,
-		(SELECT SUM(i2.unit_price * i2.quantity) FROM items i2) AS total_general,
-		MAX(o1.order_date) as ultima_orden
-	FROM customer c1 JOIN orders o1 ON o1.customer_num = c1.customer_num JOIN items i1 ON i1.order_num = o1.order_num
-	WHERE EXISTS (SELECT 1 FROM orders o3 JOIN items i3 ON o3.order_num = i3.order_num WHERE o3.customer_num = c1.customer_num HAVING COUNT(DISTINCT i3.manu_code) > 2)
-	GROUP BY c1.customer_num, c1.lname, c1.company
-	HAVING COUNT(DISTINCT o1.order_num) >= 3
-	UNION 
-	SELECT 2 AS ord, c1.customer_num, c1.lname, c1.company, 0 AS cant_ordenes, (SELECT SUM(unit_price*quantity) FROM items) AS monto_total,
-		(SELECT SUM(i2.unit_price * i2.quantity) FROM items i2) as total_general,
-		null AS ultima_orden
-	FROM customer c1 
-	WHERE c1.customer_num NOT IN (SELECT customer_num FROM orders)
-	GROUP BY c1.customer_num, c1.lname, c1.company
-	
+GO
+CREATE VIEW vista_clientes
+AS
+			SELECT 1 AS ord, c1.customer_num, c1.lname, c1.company, COUNT(DISTINCT o1.order_num) AS cant_ordenes, SUM(i1.unit_price * i1.quantity) as monto_total,
+			(SELECT SUM(i2.unit_price * i2.quantity)
+			FROM items i2) AS total_general,
+			MAX(o1.order_date) as ultima_orden
+		FROM customer c1 JOIN orders o1 ON o1.customer_num = c1.customer_num JOIN items i1 ON i1.order_num = o1.order_num
+		WHERE EXISTS (SELECT 1
+		FROM orders o3 JOIN items i3 ON o3.order_num = i3.order_num
+		WHERE o3.customer_num = c1.customer_num
+		HAVING COUNT(DISTINCT i3.manu_code) > 2)
+		GROUP BY c1.customer_num, c1.lname, c1.company
+		HAVING COUNT(DISTINCT o1.order_num) >= 3
+	UNION
+		SELECT 2 AS ord, c1.customer_num, c1.lname, c1.company, 0 AS cant_ordenes, (SELECT SUM(unit_price*quantity)
+			FROM items) AS monto_total,
+			(SELECT SUM(i2.unit_price * i2.quantity)
+			FROM items i2) as total_general,
+			null AS ultima_orden
+		FROM customer c1
+		WHERE c1.customer_num NOT IN (SELECT customer_num
+		FROM orders)
+		GROUP BY c1.customer_num, c1.lname, c1.company
+GO
 
-SELECT * FROM vista_clientes ORDER BY 1, 5
+SELECT *
+FROM vista_clientes
+ORDER BY 1, 5
 
 /*
 Crear una consulta que devuelva los 5 primeros estados y el tipo de producto
@@ -106,13 +120,16 @@ Ordenarlo por la cantidad vendida en forma descendente.
 Nota: No se permite utilizar funciones, ni tablas temporales.
 */
 
-SELECT DISTINCT TOP 5 c1.state, 
-	(SELECT TOP 1 pt2.description FROM orders o2 JOIN items i2 ON o2.order_num = i2.order_num
-											   JOIN product_types pt2 ON i2.stock_num = pt2.stock_num
-											   JOIN customer c2 ON c2.customer_num = o2.customer_num
-											   WHERE c1.state = c2.state
-											   GROUP BY pt2.description
-											   ORDER BY SUM(i2.quantity) DESC)
+SELECT DISTINCT TOP 5
+	c1.state,
+	(SELECT TOP 1
+		pt2.description
+	FROM orders o2 JOIN items i2 ON o2.order_num = i2.order_num
+		JOIN product_types pt2 ON i2.stock_num = pt2.stock_num
+		JOIN customer c2 ON c2.customer_num = o2.customer_num
+	WHERE c1.state = c2.state
+	GROUP BY pt2.description
+	ORDER BY SUM(i2.quantity) DESC)
 FROM customer c1
 
 
@@ -124,14 +141,19 @@ supere el promedio de las anteriores. Ordenar el resultado por monto total en fo
 descendiente.
 */
 
-SELECT 2, c1.customer_num, c1.fname, c1.lname, null AS paid_date, 0 AS monto_total FROM customer c1 WHERE NOT EXISTS (SELECT o1.customer_num FROM orders o1 WHERE c1.customer_num = o1.customer_num)
+	SELECT 2, c1.customer_num, c1.fname, c1.lname, null AS paid_date, 0 AS monto_total
+	FROM customer c1
+	WHERE NOT EXISTS (SELECT o1.customer_num
+	FROM orders o1
+	WHERE c1.customer_num = o1.customer_num)
 UNION
-SELECT 1, c1.customer_num, c1.fname, c1.lname, COALESCE(CAST(o1.paid_date AS VARCHAR), 'No pagado'), SUM(i1.quantity * i1.unit_price)
-FROM customer c1 JOIN orders o1 ON c1.customer_num = o1.customer_num JOIN items i1 ON i1.order_num = o1.order_num
-GROUP BY c1.customer_num, c1.fname, c1.lname, o1.paid_date, o1.order_date, o1.order_num
-HAVING o1.order_date = MAX(o1.order_date) AND 
-	SUM(i1.quantity * i1.unit_price) > (SELECT SUM(i2.quantity * i2.unit_price) / COUNT(DISTINCT o2.order_num) FROM items i2 JOIN orders o2 ON o2.order_num = i2.order_num 
-	WHERE o2.customer_num = c1.customer_num AND o2.order_num != o1.order_num)
+	SELECT 1, c1.customer_num, c1.fname, c1.lname, COALESCE(CAST(o1.paid_date AS VARCHAR), 'No pagado'), SUM(i1.quantity * i1.unit_price)
+	FROM customer c1 JOIN orders o1 ON c1.customer_num = o1.customer_num JOIN items i1 ON i1.order_num = o1.order_num
+	GROUP BY c1.customer_num, c1.fname, c1.lname, o1.paid_date, o1.order_date, o1.order_num
+	HAVING o1.order_date = MAX(o1.order_date) AND
+		SUM(i1.quantity * i1.unit_price) > (SELECT SUM(i2.quantity * i2.unit_price) / COUNT(DISTINCT o2.order_num)
+		FROM items i2 JOIN orders o2 ON o2.order_num = i2.order_num
+		WHERE o2.customer_num = c1.customer_num AND o2.order_num != o1.order_num)
 ORDER BY 1, 6 DESC
 
 /*
@@ -146,12 +168,18 @@ cantidad total vendida y por monto total, ambos en forma decreciente.
 Nota: No se permiten utilizar funciones, ni tablas temporales.*/
 
 SELECT pt.stock_num, pt.description, p.manu_code, (
-	SELECT SUM(i2.quantity) FROM items i2 WHERE i2.stock_num = pt.stock_num AND i2.manu_code = p.manu_code
+	SELECT SUM(i2.quantity)
+	FROM items i2
+	WHERE i2.stock_num = pt.stock_num AND i2.manu_code = p.manu_code
 ) AS cantidad_vendida, (
-	SELECT SUM(i2.quantity * i2.unit_price) FROM items i2 WHERE i2.stock_num = pt.stock_num AND i2.manu_code = p.manu_code 
-) AS monto_total 
+	SELECT SUM(i2.quantity * i2.unit_price)
+	FROM items i2
+	WHERE i2.stock_num = pt.stock_num AND i2.manu_code = p.manu_code 
+) AS monto_total
 FROM product_types pt JOIN products p ON p.stock_num = pt.stock_num
-WHERE (SELECT SUM(i2.quantity) FROM items i2 WHERE i2.stock_num = pt.stock_num AND i2.manu_code = p.manu_code) >= 
+WHERE (SELECT SUM(i2.quantity)
+FROM items i2
+WHERE i2.stock_num = pt.stock_num AND i2.manu_code = p.manu_code) >= 
 	COALESCE((SELECT TOP 1 SUM(i2.quantity) FROM items i2 WHERE i2.stock_num = pt.stock_num AND i2.manu_code != p.manu_code ORDER BY SUM(i2.quantity) DESC), 0)
 
 
@@ -165,16 +193,22 @@ zipcode comience con 94.
 */
 
 SELECT c1.customer_num, lname, fname, (
-	SELECT SUM(i1.quantity * i1.unit_price) FROM items i1 JOIN orders o1 ON o1.order_num = i1.order_num WHERE o1.customer_num = c1.customer_num
+	SELECT SUM(i1.quantity * i1.unit_price)
+	FROM items i1 JOIN orders o1 ON o1.order_num = i1.order_num
+	WHERE o1.customer_num = c1.customer_num
 ) AS 'Total comprado por el cliente',
-COUNT(DISTINCT o1.order_num) AS 'Cantidad OC',
-(SELECT COUNT(order_num) FROM orders) AS 'Total OC'
+	COUNT(DISTINCT o1.order_num) AS 'Cantidad OC',
+	(SELECT COUNT(order_num)
+	FROM orders) AS 'Total OC'
 FROM customer c1 JOIN orders o1 ON o1.customer_num = c1.customer_num
 WHERE c1.zipcode LIKE '94%'
 GROUP BY c1.customer_num, lname, fname
-HAVING COUNT(DISTINCT o1.order_num) >= 2 AND 
-(SELECT SUM(i2.quantity * i2.unit_price) / COUNT(DISTINCT o2.order_num) FROM items i2 JOIN orders o2 ON o2.order_num = i2.order_num WHERE o2.customer_num = c1.customer_num) >
-(SELECT SUM(i2.quantity * i2.unit_price) / COUNT(DISTINCT i2.order_num) FROM items i2)
+HAVING COUNT(DISTINCT o1.order_num) >= 2 AND
+	(SELECT SUM(i2.quantity * i2.unit_price) / COUNT(DISTINCT o2.order_num)
+	FROM items i2 JOIN orders o2 ON o2.order_num = i2.order_num
+	WHERE o2.customer_num = c1.customer_num) >
+(SELECT SUM(i2.quantity * i2.unit_price) / COUNT(DISTINCT i2.order_num)
+	FROM items i2)
 
 /*
 Se requiere crear una tabla temporal #ABC_Productos un ABC de Productos ordenado por cantidad
@@ -186,13 +220,19 @@ pertenezcan a fabricantes que fabriquen al menos 10 productos diferentes.
 
 DROP TABLE #ABC_Productos
 SELECT i1.stock_num, i1.manu_code, pt.description, m.manu_name, SUM(i1.quantity * i1.unit_price) AS 'u$ por Producto', SUM(i1.quantity) AS 'Unid. por Producto'
-INTO #ABC_Productos FROM items i1 JOIN product_types pt ON i1.stock_num = pt.stock_num
-								  JOIN manufact m ON m.manu_code = i1.manu_code
-WHERE i1.manu_code IN (SELECT manu_code FROM products GROUP BY manu_code HAVING COUNT(DISTINCT stock_num) >= 10)
+INTO #ABC_Productos
+FROM items i1 JOIN product_types pt ON i1.stock_num = pt.stock_num
+	JOIN manufact m ON m.manu_code = i1.manu_code
+WHERE i1.manu_code IN (SELECT manu_code
+FROM products
+GROUP BY manu_code
+HAVING COUNT(DISTINCT stock_num) >= 10)
 GROUP BY i1.stock_num, i1.manu_code, pt.description, m.manu_name
 
 
-SELECT * FROM #ABC_Productos ORDER BY 5 
+SELECT *
+FROM #ABC_Productos
+ORDER BY 5
 
 
 /*
@@ -206,12 +246,16 @@ mes y descripción del tipo de producto en forma ascendente y por cantidad de pro
 forma descendente.
 */
 
-SELECT description, MONTH(o.order_date) AS mes_solicitado, c1.lname + ', ' + c1.fname AS cliente_que_lo_solicito, COUNT(DISTINCT o.order_num) AS 'Cant OC', 
-	SUM(i1.quantity) AS 'Unid Producto', SUM(i1.quantity * i1.unit_price) AS 'u$ Producto' 
+SELECT description, MONTH(o.order_date) AS mes_solicitado, c1.lname + ', ' + c1.fname AS cliente_que_lo_solicito, COUNT(DISTINCT o.order_num) AS 'Cant OC',
+	SUM(i1.quantity) AS 'Unid Producto', SUM(i1.quantity * i1.unit_price) AS 'u$ Producto'
 FROM #ABC_Productos abc JOIN items i1 ON i1.stock_num = abc.stock_num AND i1.manu_code = abc.manu_code
-						JOIN orders o ON o.order_num = i1.order_num
-						JOIN customer c1 ON c1.customer_num = o.customer_num
-WHERE c1.state = (SELECT TOP 1 state FROM customer GROUP BY state ORDER BY COUNT(customer_num) DESC)
+	JOIN orders o ON o.order_num = i1.order_num
+	JOIN customer c1 ON c1.customer_num = o.customer_num
+WHERE c1.state = (SELECT TOP 1
+	state
+FROM customer
+GROUP BY state
+ORDER BY COUNT(customer_num) DESC)
 GROUP BY description, MONTH(o.order_date), c1.lname + ', ' + c1.fname
 ORDER BY MONTH(o.order_date), description ASC, SUM(i1.quantity) DESC
 
@@ -226,15 +270,19 @@ de cliente y apellido del 2do cliente ordenado por stock_num y manu_code
 
 SELECT DISTINCT i1.stock_num, i1.manu_code, c1.lname + ', ' + c1.fname AS cliente1, c2.lname + ', ' + c2.fname AS cliente2
 FROM items i1 JOIN orders o1 ON i1.order_num = o1.order_num
-			  JOIN customer c1 ON o1.customer_num = c1.customer_num
-			  JOIN items i2 ON i2.stock_num = i1.stock_num AND i1.manu_code = i2.manu_code AND i1.order_num <> i2.order_num
-			  JOIN orders o2 ON o2.order_num = i2.order_num
-			  JOIN customer c2 ON o2.customer_num = c2.customer_num
+	JOIN customer c1 ON o1.customer_num = c1.customer_num
+	JOIN items i2 ON i2.stock_num = i1.stock_num AND i1.manu_code = i2.manu_code AND i1.order_num <> i2.order_num
+	JOIN orders o2 ON o2.order_num = i2.order_num
+	JOIN customer c2 ON o2.customer_num = c2.customer_num
 WHERE c1.customer_num <> c2.customer_num AND i1.stock_num IN (5,6,9) AND i1.manu_code = 'ANZ' AND
-(
-(SELECT SUM(i3.quantity) FROM items i3 JOIN orders o3 ON i3.order_num = o3.order_num WHERE i3.stock_num = i1.stock_num AND i3.manu_code = i1.manu_code AND o3.customer_num = c1.customer_num) > 
-(SELECT SUM(i3.quantity) FROM items i3 JOIN orders o3 ON i3.order_num = o3.order_num WHERE i3.stock_num = i1.stock_num AND i3.manu_code = i1.manu_code AND o3.customer_num = c2.customer_num)
-) 
+	(
+(SELECT SUM(i3.quantity)
+	FROM items i3 JOIN orders o3 ON i3.order_num = o3.order_num
+	WHERE i3.stock_num = i1.stock_num AND i3.manu_code = i1.manu_code AND o3.customer_num = c1.customer_num) > 
+(SELECT SUM(i3.quantity)
+	FROM items i3 JOIN orders o3 ON i3.order_num = o3.order_num
+	WHERE i3.stock_num = i1.stock_num AND i3.manu_code = i1.manu_code AND o3.customer_num = c2.customer_num)
+)
 ORDER BY 1,2
 
 /*
@@ -250,17 +298,17 @@ Los valores máximos y mínimos solicitados deberán corresponderse a los datos de 
 las órdenes existentes, sin importar a que cliente corresponda el dato.
 */
 
-SELECT MAX(cantOrd) 'Mayor cantidad de OC', 
-	   MAX(sumPrecio) 'Mayor total en u$ solicitado por un cliente',
-	   MAX(cantItem) 'La mayor cantidad de productos solicitados por un cliente', 
-	   MIN(cantOrd) 'Menor cantidad de OC', 
-	   MIN(sumPrecio) 'Menor total en u$ solicitado por un cliente', 
-	   MIN(cantItem) 'La menor cantidad de productos solicitados por un cliente'
-FROM (SELECT o.customer_num, COUNT(DISTINCT o.order_num) cantOrd, 
-							 SUM(i.quantity * i.unit_price) sumPrecio, 
-							 SUM(i.quantity) cantItem
-            FROM orders o JOIN items i ON i.order_num = o.order_num
-            GROUP BY o.customer_num) alias
+SELECT MAX(cantOrd) 'Mayor cantidad de OC',
+	MAX(sumPrecio) 'Mayor total en u$ solicitado por un cliente',
+	MAX(cantItem) 'La mayor cantidad de productos solicitados por un cliente',
+	MIN(cantOrd) 'Menor cantidad de OC',
+	MIN(sumPrecio) 'Menor total en u$ solicitado por un cliente',
+	MIN(cantItem) 'La menor cantidad de productos solicitados por un cliente'
+FROM (SELECT o.customer_num, COUNT(DISTINCT o.order_num) cantOrd,
+		SUM(i.quantity * i.unit_price) sumPrecio,
+		SUM(i.quantity) cantItem
+	FROM orders o JOIN items i ON i.order_num = o.order_num
+	GROUP BY o.customer_num) alias
 
 /*
 Seleccionar los número de cliente, número de orden y monto total de la orden de aquellos clientes del
@@ -272,21 +320,24 @@ en el mismo año.
 
 SELECT o1.customer_num, o1.order_num, SUM(i1.quantity * i1.unit_price) AS 'Monto Total'
 FROM orders o1 JOIN items i1 ON o1.order_num = i1.order_num
-			   JOIN customer c1 ON c1.customer_num = o1.customer_num
+	JOIN customer c1 ON c1.customer_num = o1.customer_num
 WHERE c1.state = 'CA' AND o1.customer_num IN (
 
-	SELECT customer_num FROM orders o2
+	SELECT customer_num
+	FROM orders o2
 	WHERE YEAR(o2.order_date) = 2015
 	GROUP BY o2.customer_num
 	HAVING COUNT(*) >= 4
 )
 GROUP BY o1.customer_num, o1.order_num
-HAVING COUNT(i1.item_num) > (SELECT TOP 1 COUNT(i3.item_num) FROM items i3 
-																JOIN orders o3 ON i3.order_num = o3.order_num 
-																JOIN customer c3 ON c3.customer_num = o3.customer_num
-																WHERE c3.state = 'AZ' AND YEAR(o3.order_date) = 2015
-																GROUP BY i3.order_num
-																ORDER BY COUNT(i3.item_num) DESC)
+HAVING COUNT(i1.item_num) > (SELECT TOP 1
+	COUNT(i3.item_num)
+FROM items i3
+	JOIN orders o3 ON i3.order_num = o3.order_num
+	JOIN customer c3 ON c3.customer_num = o3.customer_num
+WHERE c3.state = 'AZ' AND YEAR(o3.order_date) = 2015
+GROUP BY i3.order_num
+ORDER BY COUNT(i3.item_num) DESC)
 
 
 /*
@@ -297,15 +348,17 @@ monto en dólares en órdenes de compra, con el formato de salida:
 (*) El total solicitado contendrá la suma de los dos clientes.
 */
 
-SELECT TOP 1 s.state 'Código Estado', s.sname 'Descripción Estado', c1.lname + ', ' + c1.fname AS cliente1, c2.lname + ', ' + c2.fname AS cliente2, 
-(c2.Total + (SELECT SUM(i.quantity * i.unit_price) AS total
-			FROM items i JOIN orders o ON o.order_num = i.order_num AND o.customer_num = c1.customer_num GROUP BY o.customer_num)) AS 'Total Solicitado'
+SELECT TOP 1
+	s.state 'Código Estado', s.sname 'Descripción Estado', c1.lname + ', ' + c1.fname AS cliente1, c2.lname + ', ' + c2.fname AS cliente2,
+	(c2.Total + (SELECT SUM(i.quantity * i.unit_price) AS total
+	FROM items i JOIN orders o ON o.order_num = i.order_num AND o.customer_num = c1.customer_num
+	GROUP BY o.customer_num)) AS 'Total Solicitado'
 
 FROM state s JOIN customer c1 ON c1.state = s.state
-			 JOIN (SELECT o2.customer_num, state, fname, lname, SUM(i3.quantity * i3.unit_price) as 'Total'
-					FROM customer c3 JOIN orders o2 ON o2.customer_num = c3.customer_num 
-									 JOIN items i3 ON i3.order_num = o2.order_num
-									 GROUP BY state, fname, lname, o2.customer_num) c2 ON c2.state = c1.state AND c1.customer_num > c2.customer_num
+	JOIN (SELECT o2.customer_num, state, fname, lname, SUM(i3.quantity * i3.unit_price) as 'Total'
+	FROM customer c3 JOIN orders o2 ON o2.customer_num = c3.customer_num
+		JOIN items i3 ON i3.order_num = o2.order_num
+	GROUP BY state, fname, lname, o2.customer_num) c2 ON c2.state = c1.state AND c1.customer_num > c2.customer_num
 WHERE s.state = 'CA'
 ORDER BY 5 DESC
 
@@ -327,25 +380,31 @@ Listar toda la información ordenada por “fecha modificada”
 
 
 
-SELECT DISTINCT TOP 1 order_num, customer_num, order_date, null AS 'Fecha Modificada'
-FROM (
-	SELECT DISTINCT TOP 5 o1.order_num, i1.manu_code, o1.customer_num, o1.order_date, SUM(i1.quantity) AS 'cantidad_comprada'
-	FROM orders o1 JOIN items i1 ON o1.order_num = i1.order_num 
-	WHERE i1.manu_code = 'ANZ'
-	GROUP BY o1.order_num, i1.manu_code, o1.customer_num, o1.order_date
-	ORDER BY SUM(i1.quantity) DESC
-) a JOIN manufact m ON m.manu_code = a.manu_code
-UNION SELECT order_num, customer_num, order_date, [Fecha Modificada]  FROM 
-	(SELECT DISTINCT TOP 4 cantidad_comprada, order_num, customer_num, order_date,order_date + m.lead_time + 1 AS 'Fecha Modificada'
+	SELECT DISTINCT TOP 1
+		order_num, customer_num, order_date, null AS 'Fecha Modificada'
 	FROM (
-		SELECT DISTINCT TOP 5 o1.order_num, i1.manu_code, o1.customer_num, o1.order_date, SUM(i1.quantity) AS 'cantidad_comprada'
-		FROM orders o1 JOIN items i1 ON o1.order_num = i1.order_num 
+	SELECT DISTINCT TOP 5
+			o1.order_num, i1.manu_code, o1.customer_num, o1.order_date, SUM(i1.quantity) AS 'cantidad_comprada'
+		FROM orders o1 JOIN items i1 ON o1.order_num = i1.order_num
 		WHERE i1.manu_code = 'ANZ'
 		GROUP BY o1.order_num, i1.manu_code, o1.customer_num, o1.order_date
-		ORDER BY o1.order_date DESC
+		ORDER BY SUM(i1.quantity) DESC
+) a JOIN manufact m ON m.manu_code = a.manu_code
+UNION
+	SELECT order_num, customer_num, order_date, [Fecha Modificada]
+	FROM
+		(SELECT DISTINCT TOP 4
+			cantidad_comprada, order_num, customer_num, order_date, order_date + m.lead_time + 1 AS 'Fecha Modificada'
+		FROM (
+		SELECT DISTINCT TOP 5
+				o1.order_num, i1.manu_code, o1.customer_num, o1.order_date, SUM(i1.quantity) AS 'cantidad_comprada'
+			FROM orders o1 JOIN items i1 ON o1.order_num = i1.order_num
+			WHERE i1.manu_code = 'ANZ'
+			GROUP BY o1.order_num, i1.manu_code, o1.customer_num, o1.order_date
+			ORDER BY o1.order_date DESC
 	) a JOIN manufact m ON m.manu_code = a.manu_code
-	ORDER BY cantidad_comprada ASC
-) b 
+		ORDER BY cantidad_comprada ASC
+) b
 
 /*
 Listar el numero, nombre, apellido, estado, cantidad de ordenes y monto total comprado de los
@@ -356,10 +415,11 @@ total promedio de órdenes de compra.
 
 SELECT c1.customer_num, c1.fname, c1.lname, c1.state, COUNT(DISTINCT o1.order_num) AS 'Cantidad de Ordenes' , SUM(i1.quantity * i1.unit_price) AS 'Monto Total'
 FROM customer c1 JOIN orders o1 ON o1.customer_num = c1.customer_num
-				 JOIN items i1 ON i1.order_num = o1.order_num
+	JOIN items i1 ON i1.order_num = o1.order_num
 WHERE c1.state <> 'WI'
 GROUP BY c1.customer_num, c1.fname, c1.lname, c1.state
-HAVING SUM(i1.quantity * i1.unit_price) > (SELECT SUM(i2.quantity * i2.unit_price) / COUNT(DISTINCT i2.order_num) FROM items i2)
+HAVING SUM(i1.quantity * i1.unit_price) > (SELECT SUM(i2.quantity * i2.unit_price) / COUNT(DISTINCT i2.order_num)
+FROM items i2)
 
 
 
@@ -372,13 +432,14 @@ descendente.
 */
 
 
-SELECT c.customer_num, fname, lname, state, COUNT(DISTINCT o.order_num), SUM(i.quantity * i.unit_price) 
+SELECT c.customer_num, fname, lname, state, COUNT(DISTINCT o.order_num), SUM(i.quantity * i.unit_price)
 FROM customer c LEFT JOIN orders o ON o.customer_num = c.customer_num LEFT JOIN items i ON i.order_num = o.order_num
 WHERE YEAR(o.order_date) = 2015 AND state != 'FL'
 GROUP BY c.customer_num, fname, lname, state
-HAVING SUM(i.quantity * i.unit_price) > (SELECT SUM(i1.quantity * i1.unit_price) / COUNT(DISTINCT o1.customer_num) FROM orders o1 JOIN items i1 ON o1.order_num = i1.order_num 
-											JOIN customer c1 ON c1.customer_num = o1.customer_num
-											WHERE c1.state != 'FL')
+HAVING SUM(i.quantity * i.unit_price) > (SELECT SUM(i1.quantity * i1.unit_price) / COUNT(DISTINCT o1.customer_num)
+FROM orders o1 JOIN items i1 ON o1.order_num = i1.order_num
+	JOIN customer c1 ON c1.customer_num = o1.customer_num
+WHERE c1.state != 'FL')
 ORDER BY SUM(i.quantity * i.unit_price) DESC
 
 
@@ -391,7 +452,7 @@ comprado nada durante el año 2015, mostrarlo igual.
 
 SELECT c1.customer_num, c1.fname, c1.lname, SUM(i1.quantity*i1.unit_price), a.customer_num, a.fname, a.lname, a.total
 FROM customer c1 LEFT JOIN orders o1 ON o1.customer_num = c1.customer_num LEFT JOIN items i1 ON i1.order_num = o1.order_num
-LEFT JOIN (
+	LEFT JOIN (
 	SELECT c2.customer_num, c2.fname, c2.lname, SUM(i2.quantity*i2.unit_price) AS 'total'
 	FROM customer c2 LEFT JOIN orders o2 ON o2.customer_num = c2.customer_num LEFT JOIN items i2 ON i2.order_num = o2.order_num
 	WHERE YEAR(o2.order_date) = 2015
